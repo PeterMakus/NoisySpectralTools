@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Thursday, 25th February 2021 10:24:13 am
+Last Modified: Friday, 26th February 2021 01:59:45 pm
 '''
 import os
 from pathlib import Path
@@ -18,6 +18,7 @@ from obspy import read, UTCDateTime
 import obspy
 from obspy.clients.fdsn import Client
 from scipy.signal import welch
+from scipy.interpolate import pchip_interpolate
 
 
 def main():
@@ -115,7 +116,8 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
     """
     Computes a spectral time series. Each point in time is computed using the
     welch method. Windows overlap by half the windolength. The input stream can
-    contain one or several traces from the same station.
+    contain one or several traces from the same station. Frequency axis is
+    logarithmic.
 
     :param st: Input Stream with data from one station.
     :type st: ~obspy.core.Stream
@@ -129,15 +131,22 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
     for tr in st:
         for wintr in tr.slide(window_length=window_length, step=window_length):
             # windows will overlap with half the window length
-            f, S = welch(wintr.data, fs=tr.stats.sampling_rate)
-            l.append(S)
+            # Hard-corded nperseg so that the longest period waves that
+            # can be resolved are around 300s
+            f, S = welch(wintr.data, fs=tr.stats.sampling_rate, nperseg=2**15)
+            
+            # interpolate onto a logarithmic frequency space
+            # 256 points of resolution in f direction hardcoded for now
+            f2 = np.logspace(-3, np.log10(f.max()), 256)
+            S2 = pchip_interpolate(f, S, f2)
+            l.append(S2)
     S = np.array(l)
     
     # compute time series
     t = np.linspace(
         st[0].stats.starttime.timestamp, st[-1].stats.endtime.timestamp,
         S.shape[0])
-    return f, t, S.T     
+    return f2, t, S.T     
         
 def preprocess(st:obspy.Stream):
     """
