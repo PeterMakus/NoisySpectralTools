@@ -103,9 +103,9 @@ def plot_spct_series(
     if not norm:
         pass
     elif norm == 'f':
-        S = np.divide(S, np.linalg.norm(S, axis=0))
-    elif norm == 't':
         S = np.divide(S, np.linalg.norm(S, axis=1))
+    elif norm == 't':
+        S = np.divide(S, np.linalg.norm(S, axis=0))
     else:
         raise ValueError('Normalisation '+norm+' unkown.')
     
