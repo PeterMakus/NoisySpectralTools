@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 3rd March 2021 12:38:47 pm
+Last Modified: Wednesday, 3rd March 2021 01:02:11 pm
 '''
 import os
 from pathlib import Path
@@ -103,7 +103,7 @@ def plot_spct_series(
     if not norm:
         pass
     elif norm == 'f':
-        S = np.divide(S, np.linalg.norm(S, axis=1))
+        S = np.divide(S, np.linalg.norm(S, axis=1)[:, np.newaxis])
     elif norm == 't':
         S = np.divide(S, np.linalg.norm(S, axis=0))
     else:
