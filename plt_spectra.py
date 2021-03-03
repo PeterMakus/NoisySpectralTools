@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 26th February 2021 01:59:45 pm
+Last Modified: Wednesday, 3rd March 2021 12:38:47 pm
 '''
 import os
 from pathlib import Path
@@ -35,7 +35,7 @@ def main():
         except Exception:
             # They have a different Exception for file patterns
             continue
-        name = '%s.%s_spectrum' %(st[0].stats.network, st[0].stats.station)
+        name = '%s.%s_spectrum_normf' %(st[0].stats.network, st[0].stats.station)
         outf = os.path.join('/home', 'makus', 'samovar', 'figures',
                             'spectrograms', name)
         
@@ -46,7 +46,7 @@ def main():
                     l.append(A[item])
                 f, t, S = l
                 # plot
-                plot_spct_series(S, f, t, title=name, outfile=outf)
+                plot_spct_series(S, f, t, title=name, outfile=outf, norm='f')
                 plt.savefig(outf+'.png', format='png', dpi=300)
                 # just in case
                 plt.close()
@@ -66,9 +66,9 @@ def main():
             plt.close()
         
             
-def plot_spct_series(S:np.ndarray, f:np.ndarray,
-                     t:np.ndarray, title:str=None, outfile=None, fmt='pdf',
-                     dpi=300):
+def plot_spct_series(
+    S:np.ndarray, f:np.ndarray, t:np.ndarray, norm:str=None, title:str=None,
+    outfile=None, fmt='pdf', dpi=300):
     """
     Plots a spectral series.
 
@@ -78,6 +78,9 @@ def plot_spct_series(S:np.ndarray, f:np.ndarray,
     :type f: np.ndarray
     :param t: Vector containing times (in s)
     :type t: np.ndarray
+    :param norm: Normalise the spectrum either on the time axis with
+        norm='t' or on the frequency axis with norm='f', defaults to None.
+    :type norm: str, optional
     :param title: Plot title, defaults to None
     :type title: str, optional
     :param outfile: location to save the plot to, defaults to None
@@ -94,7 +97,18 @@ def plot_spct_series(S:np.ndarray, f:np.ndarray,
     set_mpl_params()
     
     plt.yscale('log')
-    plt.ylim(10**-3, f.max())
+    plt.ylim(10**-2, f.max())
+    
+    # Normalise
+    if not norm:
+        pass
+    elif norm == 'f':
+        S = np.divide(S, np.linalg.norm(S, axis=0))
+    elif norm == 't':
+        S = np.divide(S, np.linalg.norm(S, axis=1))
+    else:
+        raise ValueError('Normalisation '+norm+' unkown.')
+    
     pcm = plt.pcolormesh(
         utc, f, S, shading='gouraud', norm=colors.LogNorm(vmin=S.min(), vmax=S.max()))
     plt.colorbar(pcm)
