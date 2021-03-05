@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 3rd March 2021 01:02:11 pm
+Last Modified: Thursday, 4th March 2021 03:17:37 pm
 '''
 import os
 from pathlib import Path
@@ -35,7 +35,7 @@ def main():
         except Exception:
             # They have a different Exception for file patterns
             continue
-        name = '%s.%s_spectrum_normf' %(st[0].stats.network, st[0].stats.station)
+        name = '%s.%s_spectrum_medianf' %(st[0].stats.network, st[0].stats.station)
         outf = os.path.join('/home', 'makus', 'samovar', 'figures',
                             'spectrograms', name)
         
@@ -46,7 +46,8 @@ def main():
                     l.append(A[item])
                 f, t, S = l
                 # plot
-                plot_spct_series(S, f, t, title=name, outfile=outf, norm='f')
+                plot_spct_series(S, f, t, title=name, outfile=outf, norm='f',
+                                 norm_method='median')
                 plt.savefig(outf+'.png', format='png', dpi=300)
                 # just in case
                 plt.close()
@@ -67,8 +68,8 @@ def main():
         
             
 def plot_spct_series(
-    S:np.ndarray, f:np.ndarray, t:np.ndarray, norm:str=None, title:str=None,
-    outfile=None, fmt='pdf', dpi=300):
+    S:np.ndarray, f:np.ndarray, t:np.ndarray, norm:str=None, norm_method:str=None,
+    title:str=None, outfile=None, fmt='pdf', dpi=300):
     """
     Plots a spectral series.
 
@@ -81,6 +82,8 @@ def plot_spct_series(
     :param norm: Normalise the spectrum either on the time axis with
         norm='t' or on the frequency axis with norm='f', defaults to None.
     :type norm: str, optional
+    :param norm_method: Normation method to use. Either 'linalg' (i.e., length of vector),
+        'mean', or 'median'.
     :param title: Plot title, defaults to None
     :type title: str, optional
     :param outfile: location to save the plot to, defaults to None
@@ -103,11 +106,25 @@ def plot_spct_series(
     if not norm:
         pass
     elif norm == 'f':
-        S = np.divide(S, np.linalg.norm(S, axis=1)[:, np.newaxis])
+        if norm_method == 'linalg':
+            S = np.divide(S, np.linalg.norm(S, axis=1)[:, np.newaxis])
+        elif norm_method == 'mean':
+            S = np.divide(S, np.mean(S,axis=1)[:, np.newaxis])
+        elif norm_method == 'median':
+            S = np.divide(S, np.median(S,axis=1)[:, np.newaxis])
+        else:
+            raise ValueError('Normalisation method %s unkown.' %norm_method)
     elif norm == 't':
-        S = np.divide(S, np.linalg.norm(S, axis=0))
+        if norm_method == 'linalg':
+            S = np.divide(S, np.linalg.norm(S, axis=0))
+        elif norm_method == 'mean':
+            S = np.divide(S, np.mean(S,axis=0))
+        elif norm_method == 'median':
+            S = np.divide(S, np.median(S,axis=0))
+        else:
+            raise ValueError('Normalisation method %s unkown.' %norm_method)
     else:
-        raise ValueError('Normalisation '+norm+' unkown.')
+        raise ValueError('Normalisation %s unkown.' %norm)
     
     pcm = plt.pcolormesh(
         utc, f, S, shading='gouraud', norm=colors.LogNorm(vmin=S.min(), vmax=S.max()))
