@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Thursday, 4th March 2021 03:17:37 pm
+Last Modified: Wednesday, 15th September 2021 09:42:28 am
 '''
 import os
 from pathlib import Path
@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.dates as mdates
 import numpy as np
-from obspy import read, UTCDateTime
+from obspy import read, UTCDateTime, read_inventory
 import obspy
 from obspy.clients.fdsn import Client
 from scipy.signal import welch
@@ -23,21 +23,21 @@ from scipy.interpolate import pchip_interpolate
 
 def main():
     # read waveform data
-    os.chdir('/home/chris/PROJECTS/KISS/DATA/mseed')
-    
+    os.chdir('/home/makus/samovar/data/mseed')
+    client = Client('GFZ')
     for folder, _, _ in os.walk('.'):
         try:
             # If this becomes to RAM hungry, I might want to load each
             # file and compute seperately
-            st = read(os.path.join(folder, '*.shz'))
+            st = read(os.path.join(folder, '*HZ*'))
         except FileNotFoundError:
             continue
         except Exception:
             # They have a different Exception for file patterns
             continue
         name = '%s.%s_spectrum_medianf' %(st[0].stats.network, st[0].stats.station)
-        outf = os.path.join('/home', 'makus', 'samovar', 'figures',
-                            'spectrograms', name)
+        outf = os.path.join(
+            '/home', 'makus', 'samovar', 'figures', 'spectrograms', name)
         
         if  Path(outf+'.npz').is_file():
             with np.load(outf+'.npz') as A:
@@ -46,14 +46,15 @@ def main():
                     l.append(A[item])
                 f, t, S = l
                 # plot
-                plot_spct_series(S, f, t, title=name, outfile=outf, norm='f',
-                                 norm_method='median')
+                plot_spct_series(
+                    S, f, t, title=name, outfile=outf, norm='f',
+                    norm_method='median')
                 plt.savefig(outf+'.png', format='png', dpi=300)
                 # just in case
                 plt.close()
         else:
             # preprocess the data
-            st, _ = preprocess(st)
+            st, _ = preprocess(st, client)
             # compute a spectral series with 4-hourly spaced data points
             f, t, S = spct_series_welch(st, 4*3600)
 
@@ -179,7 +180,7 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
         S.shape[0])
     return f2, t, S.T     
         
-def preprocess(st:obspy.Stream):
+def preprocess(st:obspy.Stream, client):
     """
     Some very basic preprocessing on the string in order to plot the spectral
     series. Does the following steps:
@@ -195,12 +196,6 @@ def preprocess(st:obspy.Stream):
     :return: The output stream and station inventory object
     :rtype: ~obspy.core.Stream and ~obspy.core.Inventory
     """
-           
-    # Download station responses
-    gfz = Client('GFZ')
-    inv = gfz.get_stations(
-        network=st[0].stats.network,station=st[0].stats.station,
-        channel=st[0].stats.channel, level='response')
     l = []
     for tr in st:
         loc = os.path.join(
@@ -212,7 +207,19 @@ def preprocess(st:obspy.Stream):
             l.append(tr)
             del st[0]
             continue
-        
+        # Station response already available?
+        try:
+            inv = read_inventory(
+                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+                tr.stats.network, tr.stats.station))
+        except FileNotFoundError:
+            # Download station responses
+            inv = client.get_stations(
+                network=st[0].stats.network,station=st[0].stats.station,
+                channel='*', level='response')
+            inv.write(
+                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+                tr.stats.network, tr.stats.station), format="STATIONXML")
         # Downsample to make computations faster
         if tr.stats.sampling_rate < 50:
             tr.decimate(2)
