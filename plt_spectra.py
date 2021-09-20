@@ -4,10 +4,12 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 15th September 2021 09:42:28 am
+Last Modified: Monday, 20th September 2021 09:21:14 am
 '''
 import os
 from pathlib import Path
+import warnings
+import logging
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -22,9 +24,11 @@ from scipy.interpolate import pchip_interpolate
 
 
 def main():
+    # Let's get rid of all the annoying mseed warnings
+    warnings.filterwarnings("ignore")
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
-    client = Client('GFZ')
+    client = 'GFZ'
     for folder, _, _ in os.walk('.'):
         try:
             # If this becomes to RAM hungry, I might want to load each
@@ -35,24 +39,31 @@ def main():
         except Exception:
             # They have a different Exception for file patterns
             continue
-        name = '%s.%s_spectrum_medianf' %(st[0].stats.network, st[0].stats.station)
+        name = '%s.%s_spectrum_medianf' % (
+            st[0].stats.network, st[0].stats.station)
         outf = os.path.join(
             '/home', 'makus', 'samovar', 'figures', 'spectrograms', name)
-        
-        if  Path(outf+'.npz').is_file():
+
+        try:
             with np.load(outf+'.npz') as A:
                 l = []
                 for item in A.files:
                     l.append(A[item])
                 f, t, S = l
                 # plot
-                plot_spct_series(
-                    S, f, t, title=name, outfile=outf, norm='f',
-                    norm_method='median')
-                plt.savefig(outf+'.png', format='png', dpi=300)
-                # just in case
-                plt.close()
-        else:
+            plot_spct_series(
+                S, f, t, title=name, outfile=outf, norm='f',
+                norm_method='median')
+            plt.savefig(outf+'.png', format='png', dpi=300)
+            plt.close()
+            continue
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logging.exception(e)
+            # just in case
+            pass
+        try:
             # preprocess the data
             st, _ = preprocess(st, client)
             # compute a spectral series with 4-hourly spaced data points
@@ -66,11 +77,13 @@ def main():
             plt.savefig(outf+'.png', format='png', dpi=300)
             # just in case
             plt.close()
-        
+        except Exception as e:
+            logging.exception(e)
+
             
 def plot_spct_series(
-    S:np.ndarray, f:np.ndarray, t:np.ndarray, norm:str=None, norm_method:str=None,
-    title:str=None, outfile=None, fmt='pdf', dpi=300):
+    S: np.ndarray, f: np.ndarray, t: np.ndarray, norm: str=None,
+    norm_method: str=None, title:str=None, outfile=None, fmt='pdf', dpi=300):
     """
     Plots a spectral series.
 
@@ -144,6 +157,7 @@ def plot_spct_series(
     else:
         plt.show()    
 
+
 def spct_series_welch(st:obspy.Stream, window_length:int or float):
     """
     Computes a spectral time series. Each point in time is computed using the
@@ -179,7 +193,8 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
         st[0].stats.starttime.timestamp, st[-1].stats.endtime.timestamp,
         S.shape[0])
     return f2, t, S.T     
-        
+
+
 def preprocess(st:obspy.Stream, client):
     """
     Some very basic preprocessing on the string in order to plot the spectral
@@ -198,46 +213,70 @@ def preprocess(st:obspy.Stream, client):
     """
     l = []
     for tr in st:
+        tr1 = tr.copy()
         loc = os.path.join(
             '/home','makus', 'samovar', 'data', 'preprocessed',
-            '%s.%s_%s.mseed' %(tr.stats.network, tr.stats.station, tr.stats.starttime))
+            '%s.%s_%s.mseed' % (
+                tr.stats.network, tr.stats.station, tr.stats.starttime))
         # Was file already preprocessed?
-        if Path(loc).is_file():
+        try:
             tr = read(loc)[0]
             l.append(tr)
             del st[0]
-            continue
+        except Exception:
+            pass
         # Station response already available?
         try:
             inv = read_inventory(
                 '/home/makus/samovar/data/inventory/%s.%s.xml' % (
-                tr.stats.network, tr.stats.station))
+                    tr.stats.network, tr.stats.station))
         except FileNotFoundError:
             # Download station responses
+            if isinstance(client, str):
+                client = Client(client)
+                client.set_eida_token('/home/makus/.eidatoken')
             inv = client.get_stations(
                 network=st[0].stats.network,station=st[0].stats.station,
-                channel='*', level='response')
+                channel='%s?' % tr.stat.channel[:-1], level='response')
             inv.write(
                 '/home/makus/samovar/data/inventory/%s.%s.xml' % (
                 tr.stats.network, tr.stats.station), format="STATIONXML")
         # Downsample to make computations faster
-        if tr.stats.sampling_rate < 50:
+        if tr.stats.sampling_rate > 50:
             tr.decimate(2)
         # Remove station responses
-        tr.attach_response(inv)
-        tr.remove_response()
+        try:
+            tr.attach_response(inv)
+            tr.remove_response()
+        except ValueError:
+            # Download station responses
+            if isinstance(client, str):
+                client = Client(client)
+                client.set_eida_token('/home/makus/.eidatoken')
+            inv = client.get_stations(
+                network=st[0].stats.network,station=st[0].stats.station,
+                channel='%s?' % tr.stat.channel[:-1], level='response')
+            inv.write(
+                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+                tr.stats.network, tr.stats.station), format="STATIONXML")
+            tr.attach_response(inv)
+            tr.remove_response()
         
         # Detrend
         tr.detrend()
 
         # highpass filter
         tr.filter('highpass', freq=1/300, zerophase=True)
-        
+
         # Save preprocessed stream
         tr.write(loc, format='MSEED')
         l.append(tr)
-        del st[0]
+        try:
+            st.remove(tr1)
+        except ValueError:
+            pass
     return obspy.Stream(l), inv
+
 
 def set_mpl_params():
     params = {
@@ -278,7 +317,7 @@ def set_mpl_params():
         'legend.edgecolor': 'inherit'
     }
     matplotlib.rcParams.update(params)
-    matplotlib.font_manager._rebuild()
+    # matplotlib.font_manager._rebuild()
 
 
 main()
