@@ -4,13 +4,14 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Thursday, 23rd September 2021 09:08:51 am
+Last Modified: Thursday, 23rd September 2021 10:38:29 am
 '''
 import os
 from pathlib import Path
 import warnings
 import logging
 
+from mpi4py import MPI
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -24,13 +25,22 @@ from scipy.interpolate import pchip_interpolate
 
 
 def main():
+    # init mpi
+    comm = MPI.COMM_WORLD
+    psize = comm.Get_size()
+    rank = comm.Get_rank()
     # Let's get rid of all the annoying mseed warnings
     warnings.filterwarnings("ignore")
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
     norm_meth = 'median'
-    for folder, _, _ in os.walk('.'):
+    for ii, (folder, _, _) in enumerate(os.walk('.')):
+        # A bit of cumbersome way to use MPI
+        while ii+1 > psize:
+            ii -= psize
+        if rank != ii:
+            continue
         try:
             # If this becomes to RAM hungry, I might want to load each
             # file and compute seperately
