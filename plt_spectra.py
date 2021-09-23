@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Monday, 20th September 2021 09:21:14 am
+Last Modified: Thursday, 23rd September 2021 09:08:51 am
 '''
 import os
 from pathlib import Path
@@ -29,6 +29,7 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
+    norm_meth = 'median'
     for folder, _, _ in os.walk('.'):
         try:
             # If this becomes to RAM hungry, I might want to load each
@@ -39,22 +40,22 @@ def main():
         except Exception:
             # They have a different Exception for file patterns
             continue
-        name = '%s.%s_spectrum_medianf' % (
+        name = '%s.%s_spectrum' % (
             st[0].stats.network, st[0].stats.station)
         outf = os.path.join(
             '/home', 'makus', 'samovar', 'figures', 'spectrograms', name)
-
+        outfig = outf + norm_meth
         try:
-            with np.load(outf+'.npz') as A:
+            with np.load(outf + '.npz') as A:
                 l = []
                 for item in A.files:
                     l.append(A[item])
                 f, t, S = l
                 # plot
             plot_spct_series(
-                S, f, t, title=name, outfile=outf, norm='f',
-                norm_method='median')
-            plt.savefig(outf+'.png', format='png', dpi=300)
+                S, f, t, title=name, outfile=outfig, norm='f',
+                norm_method=norm_meth)
+            plt.savefig(outfig+'.png', format='png', dpi=300)
             plt.close()
             continue
         except FileNotFoundError:
@@ -73,8 +74,8 @@ def main():
             np.savez(outf, f, t, S)
 
             # plot
-            plot_spct_series(S, f, t, title=name, outfile=outf)
-            plt.savefig(outf+'.png', format='png', dpi=300)
+            plot_spct_series(S, f, t, title=name, outfile=outfig)
+            plt.savefig(outfig+'.png', format='png', dpi=300)
             # just in case
             plt.close()
         except Exception as e:
@@ -192,7 +193,7 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
     t = np.linspace(
         st[0].stats.starttime.timestamp, st[-1].stats.endtime.timestamp,
         S.shape[0])
-    return f2, t, S.T     
+    return f2, t, S.T
 
 
 def preprocess(st:obspy.Stream, client):
