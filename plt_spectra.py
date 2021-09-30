@@ -34,7 +34,7 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
-    norm_meth = 'median'
+    norm_meth = 'mean'
     for ii, (folder, _, _) in enumerate(os.walk('.')):
         # A bit of cumbersome way to use MPI
         while ii+1 > psize:
