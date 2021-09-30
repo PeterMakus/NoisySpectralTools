@@ -4,10 +4,9 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Thursday, 23rd September 2021 10:38:29 am
+Last Modified: Thursday, 30th September 2021 04:21:16 pm
 '''
 import os
-from pathlib import Path
 import warnings
 import logging
 
@@ -34,7 +33,7 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
-    norm_meth = 'mean'
+    norm_meth = 'median'
     for ii, (folder, _, _) in enumerate(os.walk('.')):
         # A bit of cumbersome way to use MPI
         while ii+1 > psize:
@@ -157,7 +156,9 @@ def plot_spct_series(
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('(dd/mm)')
     ax = plt.gca()
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %h'))
+    plt.xticks(rotation='vertical')
     if title:
         plt.title(title)
     if outfile:
@@ -190,7 +191,7 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
             # windows will overlap with half the window length
             # Hard-corded nperseg so that the longest period waves that
             # can be resolved are around 300s
-            f, S = welch(wintr.data, fs=tr.stats.sampling_rate, nperseg=2**15)
+            f, S = welch(wintr.data, fs=tr.stats.sampling_rate)
             
             # interpolate onto a logarithmic frequency space
             # 256 points of resolution in f direction hardcoded for now
@@ -243,15 +244,20 @@ def preprocess(st:obspy.Stream, client):
                     tr.stats.network, tr.stats.station))
         except FileNotFoundError:
             # Download station responses
-            if isinstance(client, str):
-                client = Client(client)
-                client.set_eida_token('/home/makus/.eidatoken')
-            inv = client.get_stations(
-                network=st[0].stats.network,station=st[0].stats.station,
-                channel='%s?' % tr.stat.channel[:-1], level='response')
-            inv.write(
-                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
-                tr.stats.network, tr.stats.station), format="STATIONXML")
+            try:
+                if isinstance(client, str):
+                    client = Client(client)
+                    client.set_eida_token('/home/makus/.eidatoken')
+                inv = client.get_stations(
+                    network=st[0].stats.network,station=st[0].stats.station,
+                    channel='%s?' % tr.stat.channel[:-1], level='response')
+                inv.write(
+                    '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+                    tr.stats.network, tr.stats.station), format="STATIONXML")
+            except Exception:
+                # Still better to just proceed
+                logging.exception('could not download inv')
+                pass
         # Downsample to make computations faster
         if tr.stats.sampling_rate > 50:
             tr.decimate(2)
@@ -260,21 +266,25 @@ def preprocess(st:obspy.Stream, client):
             tr.attach_response(inv)
             tr.remove_response()
         except ValueError:
-            # Download station responses
-            if isinstance(client, str):
-                client = Client(client)
-                client.set_eida_token('/home/makus/.eidatoken')
-            inv = client.get_stations(
-                network=st[0].stats.network,station=st[0].stats.station,
-                channel='%s?' % tr.stat.channel[:-1], level='response')
-            inv.write(
-                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
-                tr.stats.network, tr.stats.station), format="STATIONXML")
-            tr.attach_response(inv)
-            tr.remove_response()
+            try:
+                # Download station responses
+                if isinstance(client, str):
+                    client = Client(client)
+                    client.set_eida_token('/home/makus/.eidatoken')
+                inv = client.get_stations(
+                    network=st[0].stats.network,station=st[0].stats.station,
+                    channel='%s?' % tr.stat.channel[:-1], level='response')
+                inv.write(
+                    '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+                    tr.stats.network, tr.stats.station), format="STATIONXML")
+                tr.attach_response(inv)
+                tr.remove_response()
+            except Exception:
+                logging.exception('Could not remove instrument response')
+                pass
         
         # Detrend
-        tr.detrend()
+        tr.detrend(type='linear')
 
         # highpass filter
         tr.filter('highpass', freq=1/300, zerophase=True)
