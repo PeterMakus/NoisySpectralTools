@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 6th October 2021 09:43:00 am
+Last Modified: Wednesday, 6th October 2021 10:27:03 am
 '''
 import os
 from typing import Tuple
@@ -57,7 +57,7 @@ def main():
             st[0].stats.network, st[0].stats.station)
         outf = os.path.join(
             '/home', 'makus', 'samovar', 'figures', 'spectrograms', name)
-        outfig = outf + norm_meth + flim
+        outfig = outf + norm_meth + '_' + str(flim)
         try:
             with np.load(outf + '.npz') as A:
                 l = []
