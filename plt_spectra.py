@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 13th October 2021 04:24:48 pm
+Last Modified: Wednesday, 13th October 2021 04:32:04 pm
 '''
 import os
 from typing import Tuple
@@ -67,7 +67,7 @@ def main():
                 # plot
             plot_spct_series(
                 S, f, t, title=name, outfile=outfig, norm='f',
-                norm_method=norm_meth)
+                norm_method=norm_meth, flim=flim, tlim=tlim)
             plt.tight_layout()
             plt.savefig(outfig+'.png', format='png', dpi=300)
             plt.close()
@@ -90,7 +90,7 @@ def main():
             # plot
             plot_spct_series(
                 S, f, t, title=name, outfile=outfig, flim=flim, norm='f',
-                norm_method=norm_meth)
+                norm_method=norm_meth, tlim=tlim)
             plt.savefig(outfig+'.png', format='png', dpi=300)
             # just in case
             plt.close()
