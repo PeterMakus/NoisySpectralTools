@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 6th October 2021 10:27:03 am
+Last Modified: Wednesday, 13th October 2021 04:24:48 pm
 '''
 import os
 from typing import Tuple
@@ -37,7 +37,7 @@ def main():
     client = 'GFZ'
     norm_meth = 'median'
     tlim = None
-    flim = (0.1, 0.5)
+    flim = (2, 8)
     for ii, (folder, _, _) in enumerate(os.walk('.')):
         # A bit of cumbersome way to use MPI
         while ii+1 > psize:
@@ -47,7 +47,7 @@ def main():
         try:
             # If this becomes to RAM hungry, I might want to load each
             # file and compute seperately
-            st = read(os.path.join(folder, '*HZ*'))
+            st = read(os.path.join(folder, '*HN*'))
         except FileNotFoundError:
             continue
         except Exception:
@@ -56,7 +56,7 @@ def main():
         name = '%s.%s_spectrum' % (
             st[0].stats.network, st[0].stats.station)
         outf = os.path.join(
-            '/home', 'makus', 'samovar', 'figures', 'spectrograms', name)
+            '/home', 'makus', 'samovar', 'figures', 'spectrograms_N', name)
         outfig = outf + norm_meth + '_' + str(flim)
         try:
             with np.load(outf + '.npz') as A:
@@ -140,7 +140,7 @@ def plot_spct_series(
 
     plt.yscale('log')
 
-    if flim:
+    if flim is not None:
         plt.ylim(flim)
         ii = np.argmin(abs(f-flim[0]))
         jj = np.argmin(abs(f-flim[1])) + 1
@@ -149,7 +149,7 @@ def plot_spct_series(
     else:
         plt.ylim(10**-2, f.max())
 
-    if tlim:
+    if tlim is not None:
         plt.xlim(tlim)
         utc = np.array(utc)
         ii = np.argmin(abs(utc-tlim[0]))
