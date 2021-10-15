@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 10:54:57 am
+Last Modified: Friday, 15th October 2021 11:50:27 am
 '''
 import os
 from typing import Tuple
@@ -39,14 +39,14 @@ def main():
     client = 'GFZ'
     norm = None
     norm_meth = 'nonorm'
-    tlim = (datetime(2016,1,15), datetime(2016,4,1))
+    tlim = (datetime(2016, 1, 15), datetime(2016, 4, 1))
     flim = (0.5, 2)
     sc = Store_Client(client, '/home/makus/samovar/data', read_only=True)
     if rank == 0:
         statlist = sc.get_available_stations()
     else:
         statlist = None
-    statlist = comm.broadcast(statlist, root=0)
+    statlist = comm.bcast(statlist, root=0)
 
     # do the mpi stuff
     pmap = np.arange(len(statlist))*psize/len(statlist)
