@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 03:26:20 pm
+Last Modified: Friday, 15th October 2021 04:12:11 pm
 '''
 import os
 from typing import List, Tuple
@@ -297,12 +297,8 @@ def preprocess(st: obspy.Stream, client, start: UTCDateTime):
             '%s.%s_%s.mseed' % (
                 tr.stats.network, tr.stats.station, start))
         # Was file already preprocessed?
-        try:
-            tr = read(loc)[0]
-            l.append(tr)
-            del st[0]
-        except Exception:
-            pass
+        if os.path.isfile(loc):
+            return
         # Station response already available?
         try:
             # inv = read_inventory(
