@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 02:58:57 pm
+Last Modified: Friday, 15th October 2021 03:26:20 pm
 '''
 import os
 from typing import List, Tuple
@@ -96,13 +96,13 @@ def main():
                 preprocess(
                     sc._load_local(
                         net, stat, '*', '??N', starttmp, endtmp, False, False),
-                    client)
+                    client, starttmp)
                 starttmp = endtmp
                 starts.append(starttmp)
             preprocess(
                     sc._load_local(
                         net, stat, '*', '??N', starttmp, end, False, False),
-                    client)
+                    client, starttmp)
 
             # compute a spectral series with 4-hourly spaced data points
             f, t, S = spct_series_welch(starts, 4*3600, net, stat)
@@ -273,7 +273,7 @@ def spct_series_welch(
     return f2, t, S.T
 
 
-def preprocess(st: obspy.Stream, client):
+def preprocess(st: obspy.Stream, client, start: UTCDateTime):
     """
     Some very basic preprocessing on the string in order to plot the spectral
     series. Does the following steps:
@@ -295,7 +295,7 @@ def preprocess(st: obspy.Stream, client):
         loc = os.path.join(
             '/home','makus', 'samovar', 'data', 'preprocessed',
             '%s.%s_%s.mseed' % (
-                tr.stats.network, tr.stats.station, tr.stats.starttime))
+                tr.stats.network, tr.stats.station, start))
         # Was file already preprocessed?
         try:
             tr = read(loc)[0]
