@@ -4,13 +4,14 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 01:16:18 pm
+Last Modified: Friday, 15th October 2021 01:29:09 pm
 '''
 import os
 from typing import Tuple
 import warnings
 import logging
 from datetime import datetime
+import locale
 
 from mpi4py import MPI
 import matplotlib
@@ -134,6 +135,8 @@ def plot_spct_series(
     :param tlim: Limit time axis to the values in the given window
     :type tlim: Tuple[datetime, datetime]
     """
+    # Show dates in English format
+    locale.setlocale(locale.LC_ALL, "en_GB.utf8")
     # Create UTC time series
     utc = []
     for pit in t:
