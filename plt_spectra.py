@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 04:12:11 pm
+Last Modified: Friday, 15th October 2021 04:29:13 pm
 '''
 import os
 from typing import List, Tuple
@@ -91,7 +91,7 @@ def main():
             endtmp = end
             starttmp = start
             starts = [start]
-            while endtmp-starttmp > 24*3600:
+            while end-starttmp > 24*3600:
                 endtmp = starttmp + 24*3600
                 preprocess(
                     sc._load_local(
@@ -100,9 +100,9 @@ def main():
                 starttmp = endtmp
                 starts.append(starttmp)
             preprocess(
-                    sc._load_local(
-                        net, stat, '*', '??N', starttmp, end, False, False),
-                    client, starttmp)
+                sc._load_local(
+                    net, stat, '*', '??N', starttmp, end, False, False),
+                client, starttmp)
 
             # compute a spectral series with 4-hourly spaced data points
             f, t, S = spct_series_welch(starts, 4*3600, net, stat)
@@ -289,7 +289,7 @@ def preprocess(st: obspy.Stream, client, start: UTCDateTime):
     :return: The output stream and station inventory object
     :rtype: ~obspy.core.Stream and ~obspy.core.Inventory
     """
-    l = []
+    st_out = Stream()
     for tr in st:
         tr1 = tr.copy()
         loc = os.path.join(
@@ -357,13 +357,10 @@ def preprocess(st: obspy.Stream, client, start: UTCDateTime):
         tr.filter('bandpass', freqmin=0.01, freqmax=12)
 
         # Save preprocessed stream
-        tr.write(loc, format='MSEED')
-        l.append(tr)
-        try:
-            st.remove(tr1)
-        except ValueError:
-            pass
-    return obspy.Stream(l), inv
+        
+        st_out.append(tr)
+    st_out.merge()
+    st_out.write(loc, format='MSEED')
 
 
 def set_mpl_params():
