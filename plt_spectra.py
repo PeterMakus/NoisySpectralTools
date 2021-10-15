@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 13th October 2021 04:32:04 pm
+Last Modified: Friday, 15th October 2021 10:54:57 am
 '''
 import os
 from typing import Tuple
@@ -23,6 +23,8 @@ import obspy
 from obspy.clients.fdsn import Client
 from scipy.signal import welch
 from scipy.interpolate import pchip_interpolate
+from seismic.utils.miic_utils import resample_or_decimate
+from seismic.trace_data.waveform import Store_Client
 
 
 def main():
@@ -35,29 +37,30 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
-    norm_meth = 'median'
-    tlim = None
-    flim = (2, 8)
-    for ii, (folder, _, _) in enumerate(os.walk('.')):
-        # A bit of cumbersome way to use MPI
-        while ii+1 > psize:
-            ii -= psize
-        if rank != ii:
-            continue
-        try:
-            # If this becomes to RAM hungry, I might want to load each
-            # file and compute seperately
-            st = read(os.path.join(folder, '*HN*'))
-        except FileNotFoundError:
-            continue
-        except Exception:
-            # They have a different Exception for file patterns
-            continue
+    norm = None
+    norm_meth = 'nonorm'
+    tlim = (datetime(2016,1,15), datetime(2016,4,1))
+    flim = (0.5, 2)
+    sc = Store_Client(client, '/home/makus/samovar/data', read_only=True)
+    if rank == 0:
+        statlist = sc.get_available_stations()
+    else:
+        statlist = None
+    statlist = comm.broadcast(statlist, root=0)
+
+    # do the mpi stuff
+    pmap = np.arange(len(statlist))*psize/len(statlist)
+    pmap = pmap.astype(np.int32)
+    ind = pmap == rank
+    ind = np.arange(len(statlist))[ind]
+    for net, stat in np.array(statlist)[ind]:
+        st = sc._load_local(net, stat, '*', '??N', '*', '*', False, False)
         name = '%s.%s_spectrum' % (
-            st[0].stats.network, st[0].stats.station)
+            net, stat)
         outf = os.path.join(
             '/home', 'makus', 'samovar', 'figures', 'spectrograms_N', name)
-        outfig = outf + norm_meth + '_' + str(flim)
+        outfig = '%s%s_%s_%s' % (
+            outf, norm_meth, str(flim) or '', str(tlim) or '') 
         try:
             with np.load(outf + '.npz') as A:
                 l = []
@@ -66,7 +69,7 @@ def main():
                 f, t, S = l
                 # plot
             plot_spct_series(
-                S, f, t, title=name, outfile=outfig, norm='f',
+                S, f, t, title=name, outfile=outfig, norm=norm,
                 norm_method=norm_meth, flim=flim, tlim=tlim)
             plt.tight_layout()
             plt.savefig(outfig+'.png', format='png', dpi=300)
@@ -89,7 +92,7 @@ def main():
 
             # plot
             plot_spct_series(
-                S, f, t, title=name, outfile=outfig, flim=flim, norm='f',
+                S, f, t, title=name, outfile=outfig, flim=flim, norm=norm,
                 norm_method=norm_meth, tlim=tlim)
             plt.savefig(outfig+'.png', format='png', dpi=300)
             # just in case
@@ -203,7 +206,7 @@ def plot_spct_series(
         plt.show()
 
 
-def spct_series_welch(st:obspy.Stream, window_length:int or float):
+def spct_series_welch(st: obspy.Stream, window_length: float):
     """
     Computes a spectral time series. Each point in time is computed using the
     welch method. Windows overlap by half the windolength. The input stream can
@@ -241,7 +244,7 @@ def spct_series_welch(st:obspy.Stream, window_length:int or float):
     return f2, t, S.T
 
 
-def preprocess(st:obspy.Stream, client):
+def preprocess(st: obspy.Stream, client):
     """
     Some very basic preprocessing on the string in order to plot the spectral
     series. Does the following steps:
@@ -273,9 +276,12 @@ def preprocess(st:obspy.Stream, client):
             pass
         # Station response already available?
         try:
+            # inv = read_inventory(
+            #     '/home/makus/samovar/data/inventory/%s.%s.xml' % (
+            #         tr.stats.network, tr.stats.station))
             inv = read_inventory(
-                '/home/makus/samovar/data/inventory/%s.%s.xml' % (
-                    tr.stats.network, tr.stats.station))
+                '/home/makus/samovar/data/inventory/inventory.xml'
+            )
         except FileNotFoundError:
             # Download station responses
             try:
@@ -293,8 +299,9 @@ def preprocess(st:obspy.Stream, client):
                 logging.exception('could not download inv')
                 pass
         # Downsample to make computations faster
-        if tr.stats.sampling_rate > 50:
-            tr.decimate(2)
+        # if tr.stats.sampling_rate > 50:
+        #     tr.decimate(2)
+        tr = resample_or_decimate(tr, 25)
         # Remove station responses
         try:
             tr.attach_response(inv)
@@ -321,7 +328,8 @@ def preprocess(st:obspy.Stream, client):
         tr.detrend(type='linear')
 
         # highpass filter
-        tr.filter('highpass', freq=1/300, zerophase=True)
+        # tr.filter('highpass', freq=1/300, zerophase=True)
+        tr.filter('bandpass', freqmin=0.01, freqmax=12)
 
         # Save preprocessed stream
         tr.write(loc, format='MSEED')
