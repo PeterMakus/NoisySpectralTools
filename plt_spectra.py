@@ -4,10 +4,10 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Friday, 15th October 2021 01:29:09 pm
+Last Modified: Friday, 15th October 2021 02:58:57 pm
 '''
 import os
-from typing import Tuple
+from typing import List, Tuple
 import warnings
 import logging
 from datetime import datetime
@@ -22,6 +22,7 @@ import numpy as np
 from obspy import read, UTCDateTime, read_inventory
 import obspy
 from obspy.clients.fdsn import Client
+from obspy.core.stream import Stream
 from scipy.signal import welch
 from scipy.interpolate import pchip_interpolate
 from seismic.utils.miic_utils import resample_or_decimate
@@ -38,8 +39,8 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
-    norm = None
-    norm_meth = 'nonorm'
+    norm = 'f'
+    norm_meth = 'median'
     tlim = (datetime(2016, 1, 15), datetime(2016, 4, 1))
     flim = (0.5, 2)
     sc = Store_Client(client, '/home/makus/samovar/data', read_only=True)
@@ -55,8 +56,6 @@ def main():
     ind = pmap == rank
     ind = np.arange(len(statlist))[ind]
     for net, stat in np.array(statlist)[ind]:
-        start, end = sc._get_times(net, stat)
-        st = sc._load_local(net, stat, '*', '??N', start, end, False, False)
         name = '%s.%s_spectrum' % (
             net, stat)
         outf = os.path.join(
@@ -84,10 +83,29 @@ def main():
             # just in case
             pass
         try:
-            # preprocess the data
-            st, _ = preprocess(st, client)
+            # Got to load the raw data then
+            start, end = sc._get_times(net, stat)
+            # loading everything at once takes way too much RAM
+            # let's do daily chunks that are then saved to disk
+            # and loaded by the next function again
+            endtmp = end
+            starttmp = start
+            starts = [start]
+            while endtmp-starttmp > 24*3600:
+                endtmp = starttmp + 24*3600
+                preprocess(
+                    sc._load_local(
+                        net, stat, '*', '??N', starttmp, endtmp, False, False),
+                    client)
+                starttmp = endtmp
+                starts.append(starttmp)
+            preprocess(
+                    sc._load_local(
+                        net, stat, '*', '??N', starttmp, end, False, False),
+                    client)
+
             # compute a spectral series with 4-hourly spaced data points
-            f, t, S = spct_series_welch(st, 4*3600)
+            f, t, S = spct_series_welch(starts, 4*3600, net, stat)
 
             # Save to file
             np.savez(outf, f, t, S)
@@ -210,7 +228,8 @@ def plot_spct_series(
         plt.show()
 
 
-def spct_series_welch(st: obspy.Stream, window_length: float):
+def spct_series_welch(
+        starts: List[UTCDateTime], window_length: float, net: str, stat: str):
     """
     Computes a spectral time series. Each point in time is computed using the
     welch method. Windows overlap by half the windolength. The input stream can
@@ -226,14 +245,17 @@ def spct_series_welch(st: obspy.Stream, window_length: float):
     :rtype: np.ndarray
     """
     l = []
-    st.sort(keys=['starttime'])
-    for tr in st:
+    for start in starts:
+        # windows will overlap with half the window length
+        # Hard-corded nperseg so that the longest period waves that
+        # can be resolved are around 300s
+        loc = os.path.join(
+            '/home','makus', 'samovar', 'data', 'preprocessed',
+            '%s.%s_%s.mseed' % (
+                net, stat, start))
+        tr = read(loc)[0]
         for wintr in tr.slide(window_length=window_length, step=window_length):
-            # windows will overlap with half the window length
-            # Hard-corded nperseg so that the longest period waves that
-            # can be resolved are around 300s
             f, S = welch(wintr.data, fs=tr.stats.sampling_rate)
-            
             # interpolate onto a logarithmic frequency space
             # 256 points of resolution in f direction hardcoded for now
             f2 = np.logspace(-3, np.log10(f.max()), 256)
@@ -242,9 +264,12 @@ def spct_series_welch(st: obspy.Stream, window_length: float):
     S = np.array(l)
     
     # compute time series
+    # t = np.linspace(
+    #     st[0].stats.starttime.timestamp, st[-1].stats.endtime.timestamp,
+    #     S.shape[0])
     t = np.linspace(
-        st[0].stats.starttime.timestamp, st[-1].stats.endtime.timestamp,
-        S.shape[0])
+        starts[0].timestamp, starts[-1].timestamp, S.shape[0]
+    )
     return f2, t, S.T
 
 
