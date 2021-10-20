@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Tuesday, 19th October 2021 01:34:17 pm
+Last Modified: Wednesday, 20th October 2021 09:47:46 am
 '''
 import os
 from typing import List, Tuple
@@ -41,8 +41,8 @@ def main():
     client = 'GFZ'
     norm = 'f'
     norm_meth = 'median'
-    tlim = (datetime(2016, 1, 15), datetime(2016, 4, 1))
-    flim = (0.5, 2)
+    tlim = None  # (datetime(2016, 1, 15), datetime(2016, 4, 1))
+    flim = None  # (0.5, 2)
     sc = Store_Client(client, '/home/makus/samovar/data', read_only=True)
     if rank == 0:
         statlist = sc.get_available_stations()
@@ -55,13 +55,16 @@ def main():
     pmap = pmap.astype(np.int32)
     ind = pmap == rank
     ind = np.arange(len(statlist))[ind]
+    dir = '/home/samovar/figures/spectrograms_N'
+    figdir = os.path.join(
+        dir, '%s_%s' % (str(flim) or 'broadband', str(tlim) or ''))
+    os.makedirs(figdir, exist_ok=True)
+    
     for net, stat in np.array(statlist)[ind]:
         name = '%s.%s_spectrum' % (
             net, stat)
-        outf = os.path.join(
-            '/home', 'makus', 'samovar', 'figures', 'spectrograms_N', name)
-        outfig = '%s%s_%s_%s' % (
-            outf, norm_meth, str(flim) or '', str(tlim) or '') 
+        outf = os.path.join(dir, name)
+        outfig = os.path.join(figdir, name)
         try:
             with np.load(outf + '.npz') as A:
                 l = []
@@ -253,12 +256,15 @@ def spct_series_welch(
             '/home','makus', 'samovar', 'data', 'preprocessed',
             '%s.%s_%s.mseed' % (
                 net, stat, start))
-        tr = read(loc)[0]
+        try:
+            tr = read(loc)[0]
+        except FileNotFoundError:
+            continue
         for wintr in tr.slide(window_length=window_length, step=window_length):
             f, S = welch(wintr.data, fs=tr.stats.sampling_rate)
             # interpolate onto a logarithmic frequency space
             # 256 points of resolution in f direction hardcoded for now
-            f2 = np.logspace(-3, np.log10(f.max()), 256)
+            f2 = np.logspace(-3, np.log10(f.max()), 512)
             S2 = pchip_interpolate(f, S, f2)
             l.append(S2)
     S = np.array(l)
@@ -291,7 +297,6 @@ def preprocess(st: obspy.Stream, client, start: UTCDateTime):
     """
     st_out = Stream()
     for tr in st:
-        tr1 = tr.copy()
         loc = os.path.join(
             '/home','makus', 'samovar', 'data', 'preprocessed',
             '%s.%s_%s.mseed' % (
