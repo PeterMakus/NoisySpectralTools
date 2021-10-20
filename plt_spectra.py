@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 20th October 2021 12:57:29 pm
+Last Modified: Wednesday, 20th October 2021 02:05:08 pm
 '''
 import os
 from typing import List, Tuple
@@ -43,12 +43,13 @@ def main():
     norml = ['f', None]
     norm_meth_l = ['median', None]
     tliml = [None, (datetime(2016, 1, 15), datetime(2016, 4, 1))]
-    
+
     for flim in fliml:
         for norm, norm_meth in zip(norml, norm_meth_l):
             for tlim in tliml:
                 inner_loop(
                     client, norm, norm_meth, tlim, flim, comm, psize, rank)
+
 
 def inner_loop(
     client, norm: str, norm_meth: str, tlim: Tuple[datetime, datetime],
@@ -66,10 +67,14 @@ def inner_loop(
     ind = pmap == rank
     ind = np.arange(len(statlist))[ind]
     dir = '/home/makus/samovar/figures/spectrograms_N'
+    flimst = flim or 'broadband'
+    if flimst == flim:
+        flimst = '-'.join(str(x) for x in flim)
+    tlimst = tlim or ''
+    if tlimst == tlim:
+        tlimst = '-'.join(x.strftime('%y%m%d') for x in tlim)
     figdir = os.path.join(
-        dir, '%s_%s_%s' % (
-            '-'.join(flim or ('broad', 'band')), str(tlim or ''),
-            norm_meth or 'nonorm'))
+        dir, '%s_%s_%s' % (flimst, tlimst, norm_meth or 'nonorm'))
     os.makedirs(figdir, exist_ok=True)
 
     for net, stat in np.array(statlist)[ind]:
