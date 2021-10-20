@@ -4,7 +4,7 @@ Simple script to compute and plot time-dependent spectral power densities.
 Author: Peter Makus (makus@gfz-potsdam.de)
 
 Created: Monday, 15th February 2021 02:09:48 pm
-Last Modified: Wednesday, 20th October 2021 10:14:39 am
+Last Modified: Wednesday, 20th October 2021 12:57:29 pm
 '''
 import os
 from typing import List, Tuple
@@ -39,10 +39,20 @@ def main():
     # read waveform data
     os.chdir('/home/makus/samovar/data/mseed')
     client = 'GFZ'
-    norm = 'f'
-    norm_meth = 'median'
-    tlim = None  # (datetime(2016, 1, 15), datetime(2016, 4, 1))
-    flim = None  # (0.5, 2)
+    fliml = [None, (0.1, 0.5), (0.5, 2), (2, 8)]
+    norml = ['f', None]
+    norm_meth_l = ['median', None]
+    tliml = [None, (datetime(2016, 1, 15), datetime(2016, 4, 1))]
+    
+    for flim in fliml:
+        for norm, norm_meth in zip(norml, norm_meth_l):
+            for tlim in tliml:
+                inner_loop(
+                    client, norm, norm_meth, tlim, flim, comm, psize, rank)
+
+def inner_loop(
+    client, norm: str, norm_meth: str, tlim: Tuple[datetime, datetime],
+        flim: Tuple[float, float], comm, psize, rank):
     sc = Store_Client(client, '/home/makus/samovar/data', read_only=True)
     if rank == 0:
         statlist = sc.get_available_stations()
@@ -57,7 +67,9 @@ def main():
     ind = np.arange(len(statlist))[ind]
     dir = '/home/makus/samovar/figures/spectrograms_N'
     figdir = os.path.join(
-        dir, '%s_%s' % (str(flim or 'broadband'), str(tlim or '')))
+        dir, '%s_%s_%s' % (
+            '-'.join(flim or ('broad', 'band')), str(tlim or ''),
+            norm_meth or 'nonorm'))
     os.makedirs(figdir, exist_ok=True)
 
     for net, stat in np.array(statlist)[ind]:
@@ -175,7 +187,7 @@ def plot_spct_series(
         f = f[ii:jj]
         S = S[ii:jj, :]
     else:
-        plt.ylim(10**-2, f.max())
+        plt.ylim(10**-1, f.max())
 
     if tlim is not None:
         plt.xlim(tlim)
